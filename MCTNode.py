@@ -13,7 +13,6 @@ class MCTNode():
         self.children = []
         self.parent = None
         
-        self.score = 0. # UCT evaluation based score
         self.visits = 0
         self.win = 0 # how many games ended as wins going through this node
         self.loss = 0 # how many games ended as losses going through this node
