@@ -16,6 +16,7 @@ class MCTNode():
         self.visits = 0
         self.win = 0 # how many games ended as wins going through this node
         self.loss = 0 # how many games ended as losses going through this node
+        self.score = 0. # UCT based score
         
         self.action = action # root holds none, otherwise holds pacman's action
         self.id = next(MCTNode.id)
@@ -24,29 +25,66 @@ class MCTNode():
         self.children.append(child)
         child.parent = self
     
-    # print out node's parent and children
-    def print_relations(self):
-        if self.parent != None:
-            print('Node ' + str(self.id) + '\'s parent is ' + str(self.parent.id))
-            print('Node ' + str(self.id) + '\'s children are: ')
+    # print out node's relations
+    def print_relations(self, depth=0):
+        print('    '*depth + 'Node ' + str(self.id), end='')
+        if self.parent == None:
+            print(', Parent None')
         else:
-            print('Root node has children: ')
-        if len(self.children) == 0:
-            print('\tNONE')
+            print(', Parent ' + str(self.parent.id))
+        for child in self.children:
+            child.print_relations(depth+1)
+            
+    # print out node's statistics
+    def print_stats(self, depth=0, limit=0):
+        if depth <= limit:
+            print('    '*depth + 'Node ' + str(self.id), ' action ' + str(self.action), ' visits ' + str(self.visits), ' score ' + str(self.score))
+            for child in self.children:
+                child.print_stats(depth=depth+1, limit=limit)
         else:
-            print(', '.join(str(child.id) for child in self.children))
+            pass
+            
+    # clear the node and its descendants of their relationships
+    def removeRelations(self):
+        for child in self.children:
+            child.removeRelations()
+        self.parent = None
+        self.children.clear()
+    
+    # reset the node of its statistics, called when creating new root
+    def resetStats(self):
+        self.visits = 0
+        self.win = 0
+        self.loss = 0
+        self.score = 0.
+        self.action = None
+    
 
 if __name__ == '__main__':
     root = MCTNode()
     one = MCTNode()
     two = MCTNode()
+    three = MCTNode()
+    four = MCTNode()
     
     root.addChild(one)
     root.addChild(two)
+    one.addChild(three)
+    two.addChild(four)
     
     root.print_relations()
-    two.print_relations()
     
+    root.removeDescendants()
+    one = None
+    two = None
+    three = None
+    four = None
+    
+    try:
+        root.print_relations()
+        one.print_relations()
+    except:
+        print('Cannot print relations. Node does not exist.')
     
     
     
