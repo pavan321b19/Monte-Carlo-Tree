@@ -17,11 +17,9 @@ class MCTSAgent(Agent):
         self.root = MCTNode(None) # root node of tree used for MCTS
         self.time_limit = 0.05 # time limit to choose action in seconds
         
-        self.simcount = 500 # number of simulations to run
+        self.simcount = 250 # number of simulations to run
         self.threshold = self.simcount / 20 # minimum number of times each child is visited before using UCT to choose
-        self.prevAction = None # holds previous action
 
-    
     def runMCTS(self, gameState, simulationCount):
         """
         Builds the entire tree for a state after simulating a certain amount of times.
@@ -31,63 +29,33 @@ class MCTSAgent(Agent):
         count = 0
         while count < simulationCount:
             leaf_node = self.select(gameState)
-            if isinstance(leaf_node, tuple): # won or lost
+            if isinstance(leaf_node, tuple): # selection checks won or lost
                 result = True if leaf_node[0] else False
                 self.backpropagate(leaf_node[1], result)
             else:
                 actions = self.get_actions(leaf_node)
-                # result = self.simulate(gameState, actions)
+                # result = self.simulate(gameState, actions, stop='time')
                 result = self.simulate(gameState, actions, stop='action')
                 self.backpropagate(leaf_node, result)
             count += 1
+            
     def getAction(self, gameState):
         """
         Returns the next action the agent will take. self.simcount amount of simulations
         are run to choose each successive action.
         """
         self.runMCTS(gameState, self.simcount)
-        # Update the root node and clean restart to find successive action
-        self.root.print_stats(limit=2)
-        
-        temp = self.root
-        self.root = self.best_child(temp)
-        
         # print results
-        # self.root.print_stats(limit=0)
-        # temp.print_stats(depth=1,limit=2)
+        self.root.print_stats(limit=2)
         print('\n')
-        
-        self.root.removeRelations()
+        # Update the root node and clean restart to find successive action
+        temp = self.root
+        self.root = self.best_child(temp, 'max')
+        # self.root = self.best_child(temp, 'visits')
         action = self.root.action
-        self.root.resetStats()
-        del temp
+        self.root.reset()
         
-        self.prevAction = action
         return action
-        
-    # def getAction(self, gameState):
-    #     """
-    #     Returns the next action the agent will take
-    #     """
-    #     start = time.time()
-    #     while time.time() - start < self.time_limit:
-    #         leaf_node = self.select(gameState)
-    #         actions = self.get_actions(leaf_node)
-    #         result = self.simulate(gameState, actions)
-    #         self.backpropagate(leaf_node, result)
-    # 
-    #     # Update the root node
-    #     self.root = self.best_child(self.root)
-    # 
-    #     best_action = self.root.action
-    # 
-    #     # Update root for tree reuse
-    # 
-    #     self.root.parent = None
-    #     self.root.action = None
-    # 
-    #     # Return the best action
-    #     return best_action
 
     # Selection
     def select(self, gameState): # gameState argument passed is the game's initial state
@@ -97,16 +65,21 @@ class MCTSAgent(Agent):
         """
         node = self.root
         while True:
-            # influences score of node if game state results in terminal during selection
+            # influences score of node if game state becomes terminal during selection
             if gameState.isLose():
-                node.score -= 2
+                node.score -= 5 # arbitrary value
                 return (False, node)
             if gameState.isWin():
-                node.score += 2
+                node.score += 5
                 return (True, node)
             
             legalMoves = gameState.getLegalActions()
-            # reaching a leaf, expand randomly while not all actions have been visited
+            # at root, remove action that would move pacman back to previous
+            # location to mitigate going back and forth
+            if node.id == self.root.id and node.action != None:
+                opp = self.opposite(node.action)
+                if opp in legalMoves: legalMoves.remove(opp)
+            # Expansion: reaching a leaf, expand randomly while not all actions have been visited
             if len(node.children) < len(legalMoves):
                 # prioritize unvisited actions first
                 unvisited = [action for action in legalMoves if not any(child.action == action for child in node.children)]
@@ -120,8 +93,10 @@ class MCTSAgent(Agent):
                         if child.visits < self.threshold: select.append(i)
                     node = node.children[random.choice(select)]
                 else:
-                    # node = best
-                    node = max(node.children, key=lambda child: child.score)
+                    # for scores top down
+                    node = self.best_child(node)
+                    # for scores bottom up
+                    # node = max(node.children, key=lambda child: child.score)
             gameState = gameState.generatePacmanSuccessor(node.action)
     
     # Expansion
@@ -150,11 +125,8 @@ class MCTSAgent(Agent):
                     # Choose the next predetermined action
                     action = actions.pop(0)
                 if len(actions) == 0 or not action in legalMoves: # simulated actions here
-                    # Choose a random action 
+                    # # Choose a random action 
                     # action = random.choice(legalMoves)
-                    
-                    # Use high score evaluation function to select next move
-                    # action = self.highScoreFunction(gameState, legalMoves)
                     
                     # Use project 2 evaluation function to select next move
                     acts = [(act, self.evalFunction(gameState, act)) for act in legalMoves]
@@ -177,11 +149,8 @@ class MCTSAgent(Agent):
                     # Choose the next predetermined action
                     action = actions.pop(0)
                 if len(actions) == 0 or not action in legalMoves: # simulated actions here
-                    # Choose a random action 
+                    # # Choose a random action 
                     # action = random.choice(legalMoves)
-                    
-                    # Use high score evaluation function to select next move
-                    # action = self.highScoreFunction(gameState, legalMoves)
                     
                     # Use project 2 evaluation function to select next move
                     acts = [(act, self.evalFunction(gameState, act)) for act in legalMoves]
@@ -192,7 +161,7 @@ class MCTSAgent(Agent):
             # print(gameState.isLose())
             # print(gameState.getScore())
             # print('\n')
-            average = sum(sim_results) / len(sim_results)
+            average = sum(sim_results[:-1]) / len(sim_results[:-1])
             if gameState.isLose() or gameState.getScore() < average:
                 return False # count as loss
             if gameState.isWin() or gameState.getScore() > average:
@@ -216,19 +185,23 @@ class MCTSAgent(Agent):
             if node.id == self.root.id:
                 break
             node = node.parent
-            
-        node = leaf    
-        while True: # update UCT scores
-            # get max child score
-            if len(node.children) != 0:
-                node.score = self.best_child(node).score
-            else: # leaf
-                node.score = self.uct_score(node)
-                
-            # reached root node
-            if node.id == self.root.id:
-                break
-            node = node.parent
+        
+        # update scores bottom up
+        # node = leaf    
+        # while True: # update UCT scores    
+        #     # reached root node
+        #     if node.id == self.root.id:
+        #         node.score = self.best_child(node).score
+        #         break
+        # 
+        #     # if leaf or hasn't reached threshold visits
+        #     if node.id == leaf.id or node.visits < self.threshold:
+        #         node.score = self.uct_score(node)
+        #     else:  # get max child score
+        #         node.score = self.best_child(node).score
+        #         # node.score = self.best_child(node, 'average')
+        # 
+        #     node = node.parent
     
     def uct_score(self, node):
         """
@@ -243,9 +216,6 @@ class MCTSAgent(Agent):
         # penalize stop actions
         if node.action == Directions.STOP:
             node.score *= 0.5
-        # # penalize moving back and forth
-        # if self.prevAction != None and self.prevAction != Directions.STOP and node.action == self.prevOpposite(self.prevAction):
-        #     node.score *= 0.75
         return node.score
         
     def best_child(self, node, option='max'):
@@ -256,6 +226,8 @@ class MCTSAgent(Agent):
             return max(node.children, key=lambda child: self.uct_score(child))
         elif option == 'visits':
             return max(node.children, key=lambda child: child.visits)
+        elif option == 'average':
+            return sum([child.score for child in node.children]) / len(node.children)
     
     def get_actions(self, node):
         """
@@ -269,13 +241,20 @@ class MCTSAgent(Agent):
         actions.reverse()
         return actions
     
-    def highScoreFunction(self, currentGameState, actions):
+    def opposite(self, action):
         """
-        For simulation: evaluation function that returns action that results in 
-        highest successor game state score.
+        Returns the opposite action of the previous action
         """
-        successorScores = [(action, currentGameState.generatePacmanSuccessor(action).getScore()) for action in actions]
-        return max(successorScores, key=lambda x:x[1])[0]
+        if action == Directions.STOP:
+            return None
+        elif action == Directions.WEST:
+            return Directions.EAST
+        elif action == Directions.EAST:
+            return Directions.WEST
+        elif action == Directions.SOUTH:
+            return Directions.NORTH
+        elif action == Directions.NORTH:
+            return Directions.SOUTH
         
     def evalFunction(self, currentGameState, action):
         """
@@ -287,7 +266,6 @@ class MCTSAgent(Agent):
         newPos = successorGameState.getPacmanPosition()
         newFood = successorGameState.getFood()
         newGhostStates = successorGameState.getGhostStates()
-        newScaredTimes = [ghostState.scaredTimer for ghostState in newGhostStates]
 
         # get closest food distance value, i.e. smaller is better
         foodScore = 0
@@ -298,14 +276,11 @@ class MCTSAgent(Agent):
         # get ghost(s) distance value, i.e. larger is better
         ghostScore = 0
         if len(newGhostStates) > 1: 
-            ghostScore = sum([manhattanDistance(newPos, ghost.configuration.pos) for ghost in newGhostStates])
+            ghostScore = sum([manhattanDistance(newPos, ghost.configuration.pos) for ghost in newGhostStates]) / len(newGhostStates)
         else: 
             ghostScore = manhattanDistance(newPos, newGhostStates[0].configuration.pos)
 
-        # establish inverse relationship between ghost and food scores
-        # i.e. (big ghost score / small food score) is much better than (small ghost score / big food score)
-        # return successorGameState.getScore() + (ghostScore / (0.25*foodScore)) #- stopPenalty
-        return (ghostScore / len(newGhostStates)) / (foodScore / 2)
+        return ghostScore / foodScore 
 
     
     

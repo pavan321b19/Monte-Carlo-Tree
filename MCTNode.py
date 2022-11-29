@@ -44,21 +44,17 @@ class MCTNode():
         else:
             pass
             
-    # clear the node and its descendants of their relationships
-    def removeRelations(self):
+    # clear the node and descendants of their stats and relationships (except action)
+    def reset(self):
         for child in self.children:
-            child.removeRelations()
-        self.parent = None
+            child.reset()
         self.children.clear()
-    
-    # reset the node of its statistics, called when creating new root
-    def resetStats(self):
+        self.parent = None
+        
         self.visits = 0
         self.win = 0
         self.loss = 0
         self.score = 0.
-        self.action = None
-    
 
 if __name__ == '__main__':
     root = MCTNode()
