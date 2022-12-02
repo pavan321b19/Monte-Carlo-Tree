@@ -50,7 +50,7 @@ class PacmanTree():
 	def reset(self, state):
 		self.root = MCTNode(state.getPacmanPosition())
 
-	def update(self, new_state):
+	def update(self, new_state, timestep_discount):
 		new_pos = new_state.getPacmanPosition()
 		if self.is_junction(new_pos):
 			# If the new state is a junction, check if any of the direct children of the root are the new state
@@ -117,7 +117,7 @@ class PacmanTree():
 					self.reset(new_state)
 					return
 				
-		self.root.apply_discount(0.9)
+		self.root.apply_discount(timestep_discount)
 
 
 	def successors(self, position):

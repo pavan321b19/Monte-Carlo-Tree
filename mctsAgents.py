@@ -21,18 +21,20 @@ class MCTSAgent(Agent):
     
     The mechanism or main steps of MCTS are implemented here: Selection, Expansion, Simulation, Backpropagation.
 
-    Based heavily off of this paper: https://ieeexplore.ieee.org/document/6731713/metrics#metrics
+    Based heavily off of this paper: https://ieeexplore.ieee.org/document/6731713
     """
     
-    def __init__(self):
+    def __init__(self, **args):
 
         # Configurable parameters, in order of most important to least important
 
-        self.time_limit = 0.25 # time limit to choose action in seconds
-        self.simulation_duration = 40 # number of timesteps to simulate in each simulation
+        self.time_limit = 0.0 # time limit to choose action in seconds
+        self.num_simulations = 0 # number of simulations to run
 
-        self.survival_threshold = 0.6 # minimum survival score to consider a child on first pass
-        self.threshold = 15 # number of times all children must be visited before choosing best child
+        self.simulation_length = 20 # number of timesteps to simulate in each simulation
+
+        self.survival_threshold = 0.75 # minimum survival score to consider a child on first pass
+        self.threshold = 5 # number of times all children must be visited before choosing best child
         
         self.should_reuse = True # whether to reuse old tree
         self.timestep_discount = 0.6 # discount factor for timestep if reuse is enabled
@@ -40,13 +42,30 @@ class MCTSAgent(Agent):
         self.should_use_simulation_strategy = True # whether to use simulation strategy
         self.use_long_term_goals = True # whether to use long term goals
         self.use_tactics = True # whether to use tactics like ghost hunting or pill hunting
-        
-        self.simulated_ghost_agent = RandomGhost(1) # Only change if you want to use a different ghost agent
-        
-        # self.action_limit = 10
+
+        for key in dir(self):
+            val = getattr(self, key)
+            if key.startswith("__"):
+                continue
+            if key in args:
+                try:
+                    setattr(self, key, type(val)(args[key]))
+                except:
+                    print("Couldn't set value for key: " + key + " to value: " + args[key])
 
         # Don't change these
 
+        if self.time_limit <= 0.0:
+            self.time_limit = None
+
+        if self.num_simulations <= 0:
+            self.num_simulations = None
+
+        if self.time_limit == None and self.num_simulations == None:
+            # Use default values
+            self.num_simulations = 250
+
+        self.simulated_ghost_agent = RandomGhost(1) # Only change if you want to use a different ghost agent
         self.tree = None
         self.prev_state = None # previous state of game
         self.num_pills = 0 # number of pills at start of game
@@ -70,7 +89,13 @@ class MCTSAgent(Agent):
                 self.tree.reset(gameState)
                 return
 
-            self.tree.update(gameState)
+            for ghost in gameState.getGhostStates():
+                if ghost.scaredTimer <= 1 and manhattanDistance(gameState.getPacmanPosition(), ghost.getPosition()) <= 2:
+                    # Don't reuse old tree, start from scratch
+                    self.tree.reset(gameState)
+                    return
+
+            self.tree.update(gameState, self.timestep_discount)
         else:
             self.tree.reset(gameState)
     
@@ -84,11 +109,20 @@ class MCTSAgent(Agent):
         num_simulations = 0
         num_survived = 0
         num_selected = Counter()
-        while time.time() - start_time < self.time_limit:
+
+        def should_stop():
+            if self.time_limit != None and time.time() - start_time > self.time_limit:
+                return True
+            if self.num_simulations != None and num_simulations >= self.num_simulations:
+                return True
+            return False
+
+        while not should_stop():
             self.tactic = self.get_tactic(gameState, num_survived / num_simulations if num_simulations > 0 else 0)
             leaf_node = self.select()
             actions = self.get_actions(leaf_node)
-            num_selected[actions[0]] += 1
+            if DEBUG:
+                num_selected[actions[0]] += 1
             (sim_result, relevant_node) = self.simulate(gameState.deepCopy(), actions, leaf_node)
             result = self.evaluate(*sim_result)
             num_simulations += 1
@@ -180,13 +214,6 @@ class MCTSAgent(Agent):
         node = self.tree.root
         while True:
             successors = self.tree.get_successors(node)
-            
-            # only allow reversing direction if the node is root
-            if node != self.tree.root and len(successors) > 1:
-                successors = [successor for successor in successors if successor[1][0] != self.opposite(node.actions[-1])]
-
-            # if len(self.get_actions(node)) > self.action_limit:
-            #     return node
 
             if len(node.children) < len(successors):
                 # prioritize unvisited junctions first
@@ -224,7 +251,7 @@ class MCTSAgent(Agent):
         prev_state = None
         last_junction_state = None
         num_food = gameState.getNumFood()
-        for i in range(self.simulation_duration):
+        for i in range(self.simulation_length):
             # Early termination if we reach a terminal state
             if gameState.isWin():
                 break
@@ -354,7 +381,7 @@ class MCTSAgent(Agent):
         """
         score = node.get_value(self.tactic)
         c = math.sqrt(2)
-        explore = math.sqrt(math.log((node.parent.visits)) / (node.visits))
+        explore = math.sqrt(math.log(node.parent.visits) / node.visits)
         
         return score + (c * explore)
         
