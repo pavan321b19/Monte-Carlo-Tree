@@ -2,9 +2,11 @@
 Creates a tree of pacman junctions
 """
 
+import queue
 from MCTNode import MCTNode, Tactic
 from game import Directions
 import time
+import util
 
 class PacmanTree():
 	def __init__(self, game_state):
@@ -14,6 +16,7 @@ class PacmanTree():
 		self.tactic = Tactic.SURVIVAL
 		self.successors_lookup = {}
 		self.legal_lookup = {}
+		self.maze_distance_lookup = {}
 
 	def is_junction(self, pos):
 		# Check if the position is a junction
@@ -160,28 +163,87 @@ class PacmanTree():
 
 	def maze_distance(self, start, end):
 		# Returns the distance between two positions along the maze, along with the actions to get there
-		# Uses a breadth first search
+		# Uses an A* search where the heuristic is the manhattan distance
 		# Returns inf if the end position is not reachable from the start position
 
 		# Check if the start and end positions are the same
 		if start == end:
 			return 0, []
 
-		frontier = [(start, [])]
-		visited = set()
+		# Check if the start and end positions are in the lookup
+		if (start, end) in self.maze_distance_lookup:
+			return self.maze_distance_lookup[(start, end)]
 
-		while frontier:
-			pos, path = frontier.pop(0)
-			# Check if the position is the end position
-			if pos == end:
-				return len(path), path
-			# Add the position to the visited set
-			visited.add(pos)
-			# Add the successors of the position to the next frontier
-			actions = self.get_legal_actions(pos)
-			for action in actions:
-				next_pos = self.next_position(pos, action)
-				if next_pos not in visited:
-					frontier.append((next_pos, path + [action]))
+		# A* search
+
+		# Initialize the frontier with the start position
+		frontier = queue.PriorityQueue()
+		frontier.put((0, start))
+
+		# Initialize the explored set
+		explored = set()
+
+		# Initialize the actions dictionary
+		actions = {}
+
+		# Initialize the cost dictionary
+		costs = {}
+
+		# Initialize the cost of the start position to be 0
+		costs[start] = 0
+
+		# Initialize the actions of the start position to be empty
+		actions[start] = []
+
+		result = None
+
+		# While the frontier is not empty
+		while not frontier.empty():
+			# Get the next position from the frontier
+			current_cost, current_pos = frontier.get()
+
+			# Check if the current position is the end position
+			if current_pos == end:
+				# Return the cost and actions to get to the end position
+				result = (current_cost, actions[current_pos])
+				break
+
+			# Add the current position to the explored set
+			explored.add(current_pos)
+
+			# Get the next reachable positions from the current position
+			for next_action in self.get_legal_actions(current_pos):
+				next_pos = self.next_position(current_pos, next_action)
+
+				# Check if the next position is in the explored set
+				if next_pos in explored:
+					continue
+
+				# Get the cost of the next position
+				next_cost = current_cost + 1
+
+				# Check if the next position is in the frontier
+				if next_pos not in costs or next_cost < costs[next_pos]:
+					# Update the cost of the next position
+					costs[next_pos] = next_cost
+
+					# Update the actions of the next position
+					actions[next_pos] = actions[current_pos] + [next_action]
+
+					# Add the next position to the frontier
+					frontier.put((next_cost + util.manhattanDistance(next_pos, end), next_pos))
+
+		# Check if the result is None
+		if result is None:
+			# Return inf
+			result = (float('inf'), [])
 		
-		return float("inf"), []
+		# Add the result to the lookup
+		self.maze_distance_lookup[(start, end)] = result
+
+		reversed_actions = [Directions.REVERSE[action] for action in reversed(result[1])]
+
+		self.maze_distance_lookup[(end, start)] = (result[0], reversed_actions)
+
+		return result
+

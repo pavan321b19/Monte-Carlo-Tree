@@ -16,6 +16,7 @@ def buildLayout(layout, numberWalkers, size, numberGhosts, type):
     width = layout.shape[1]
     minDistance = 1
     maxDistance = min(height, width) -2 # account for layout edges
+    #maxDistance = min(7, max(height, width) -2) # account for layout edges
     
     # walkers' (starting position, distance to cover) initialization
     walkers = []
@@ -55,6 +56,7 @@ def buildLayout(layout, numberWalkers, size, numberGhosts, type):
     total = sum(sum(layout)) - 2*(height+width) + 4
     total_ = total
     stop_condition = 0.5*total if type == 'tunnels' else 0.4*total
+    #stop_condition = 0.33*total if type == 'tunnels' else 0.25*total
     
     # FOOD
     # tunnels: stopping condition is >= 50% of map (excluding edges) is filled with food/pills
@@ -139,6 +141,7 @@ def buildLayout(layout, numberWalkers, size, numberGhosts, type):
     openPositions = np.where(layout == 0)
     # place ghost(s) in a random spot (preferably at some minimum distance away from pacman)
     minimum = min(height, width) // 2 # too large may not work for smaller layouts
+    #minimum = max(height, width) // 2.5
     for _ in range(numberGhosts):
         dist = 0
         ghostPos = None
@@ -170,7 +173,9 @@ def generateLayout(argv):
     parser.add_argument('-s', '--size', default='medium', help='specify the size of the generated layouts; choose between small, medium, large')
     parser.add_argument('-g', '--ghosts', default=2, type=int, help='number of ghosts in layouts')
     parser.add_argument('-t', '--type', default='spatial', help='specify the type of layouts generated; choose between spatial or tunnels')
-    
+    parser.add_argument('-w', '--walkers', default=4, type=int,
+                        help='number of walkers to use')
+
     # print usage if no arguments provided
     if len(argv) == 0:
         parser.print_usage()
@@ -180,6 +185,8 @@ def generateLayout(argv):
     # check validity of some of the arguments
     if args.number < 1:
         raise argparse.ArgumentTypeError('Number of layouts has to be greater than 0!')
+    if args.walkers < 1:
+        raise argparse.ArgumentTypeError('Number of walkers has to be greater than 0!')
     if args.size not in ['small', 'medium', 'large']:
         raise argparse.ArgumentTypeError('Invalid layout size provided!')
     if args.ghosts < 1:
@@ -201,12 +208,12 @@ def generateLayout(argv):
         -1 : 'G' # ghost
     }
     # arbitrarily set min and max dimensions for layouts
-    small_min = 10
-    small_max = 16
-    medium_min = 16
-    medium_max = 22
-    large_min = 22
-    large_max = 28
+    small_min = 8
+    small_max = 12
+    medium_min = 14
+    medium_max = 16
+    large_min = 20
+    large_max = 24
     min_ = eval(args.size+'_min')
     max_ = eval(args.size+'_max')
     
@@ -216,7 +223,7 @@ def generateLayout(argv):
         height = random.randint(min_, max_)
         width = random.randint(min_, max_)
         layout = np.ones((height, width)) # initialized 2d array with all wall spots
-        layout = buildLayout(layout, 3, args.size, args.ghosts, args.type) # using 3 crawlers to build layout
+        layout = buildLayout(layout, args.walkers, args.size, args.ghosts, args.type) # using crawlers to build layout
         
         with open(f'layouts/gen_{args.size}/{args.size}{created_count}_{args.type}.lay', 'w') as f:
             for i in range(height):
