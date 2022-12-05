@@ -4,6 +4,7 @@ import sys
 import random
 import numpy as np
 from util import manhattanDistance
+import time
 
 def buildLayout(layout, numberWalkers, size, numberGhosts, type):
     """
@@ -14,7 +15,7 @@ def buildLayout(layout, numberWalkers, size, numberGhosts, type):
     height = layout.shape[0]
     width = layout.shape[1]
     minDistance = 1
-    maxDistance = max(height, width) -2 # account for layout edges
+    maxDistance = min(height, width) -2 # account for layout edges
     
     # walkers' (starting position, distance to cover) initialization
     walkers = []
@@ -23,18 +24,16 @@ def buildLayout(layout, numberWalkers, size, numberGhosts, type):
     if type == 'tunnels':
         for i in range(numberWalkers):
             if i == 0:
-                h_choice = random.choice(h_positions)
-                w_choice = random.choice(w_positions)
-                if h_choice % 2 == 0: # keep even position indices only
+                number = random.choice(h_positions)
+                if number % 2 == 0: # keep even position indices only
                     h_positions = [value for value in h_positions if value % 2 == 0]
                     w_positions = [value for value in w_positions if value % 2 == 0]
                 else: # keep odd position indices only 
                     h_positions = [value for value in h_positions if value % 2 != 0]
                     w_positions = [value for value in w_positions if value % 2 != 0]
-            # avoid edge positions and only even or only odd row/column indices
+            # avoid edge positions and use only even or only odd row/column indices
             initPos = (random.choice(h_positions), random.choice(w_positions))
             initDist = random.randint(minDistance, maxDistance//2)*2 # move even amount of distances only
-            # initDist = random.randint(minDistance, maxDistance//2)*2 # move even amount of distances
             walkers.append( [initPos, initDist] )
     else:
         for i in range(numberWalkers):
@@ -44,22 +43,23 @@ def buildLayout(layout, numberWalkers, size, numberGhosts, type):
         
     # walker direction movements defined here; takes position tuples as arguments
     def up(pos):
-        return (pos[0], pos[1]-1)
-    def down(pos):
-        return (pos[0], pos[1]+1)
-    def left(pos):
         return (pos[0]-1, pos[1])
-    def right(pos):
+    def down(pos):
         return (pos[0]+1, pos[1])
+    def left(pos):
+        return (pos[0], pos[1]-1)
+    def right(pos):
+        return (pos[0], pos[1]+1)
     directions = [up, down, left, right] # list of movement functions
     
     total = sum(sum(layout)) - 2*(height+width) + 4
     total_ = total
-    stop_condition = 0.33*total if type == 'tunnels' else 0.4*total
+    stop_condition = 0.5*total if type == 'tunnels' else 0.4*total
     
     # FOOD
-    # tunnels: stopping condition is >= 40% of map (excluding edges) is filled with food/pills
+    # tunnels: stopping condition is >= 50% of map (excluding edges) is filled with food/pills
     # spatial: stopping condition is >= 60% of map (excluding edges) is filled with food/pills
+    time_start, time_limit = time.time(), 2. # in case while loop does not end
     while total_ > stop_condition:
         for i, (p,d) in enumerate(walkers):
             pos, dist = p, d
@@ -67,31 +67,38 @@ def buildLayout(layout, numberWalkers, size, numberGhosts, type):
             if type == 'tunnels':
                 # ensures that walker only travels in a direction where it will move an even amount
                 t_dist = None
-                if direction == up: t_dist = manhattanDistance(pos, (0, pos[1])) 
-                elif direction == down: t_dist = manhattanDistance(pos, (-1, pos[1])) 
+                if direction == up: t_dist = manhattanDistance(pos, (0, pos[1])) # distances to directional edge
+                elif direction == down: t_dist = manhattanDistance(pos, (height-1, pos[1])) 
                 elif direction == left: t_dist = manhattanDistance(pos, (pos[0], 0)) 
-                elif direction == right: t_dist = manhattanDistance(pos, (pos[0], -1))
-                if t_dist % 2 != 0:
-                    # dist = t_dist - 1
-                    continue
-            while dist > 0:
-                layout[pos] = 0 # replace wall spot with food spot
+                elif direction == right: t_dist = manhattanDistance(pos, (pos[0], width-1))
+                if t_dist <= dist:
+                    if t_dist % 2 == 0: # check if even number distance to edge 
+                        while t_dist <= dist:
+                            dist -= 2 
+                    else: # odd number distance to edge 
+                        pass
+            while True:
+                layout[pos] = 0 # replace current (wall) spot with food spot
                 next = direction(pos)
+                # break if next position is an edge
                 if next[0] == 0 or next[0] == height-1 or next[1] == 0 or next[1] == width-1:
                     break
-                pos = next
                 dist -= 1
+                if dist < 0: # break after creating the number of food spots 
+                    break
+                pos = next
             walkers[i][0] = list(walkers[i][0])
             walkers[i][0] = tuple([pos[0],pos[1]]) # change walker's start position
-            
+          
         total_ = sum(sum(layout)) - 2*(height+width) + 4
         if type == 'tunnels': # re-initialize walker distances and positions
-            walkers = [[(random.choice(h_positions), random.choice(w_positions)), random.randint(minDistance, maxDistance//2)*2] for pos, _ in walkers]
-            # walkers = [[pos, random.randint(minDistance, maxDistance//2)*2] for pos, _ in walkers] # move even amount of distances
+            walkers = [[pos, random.randint(minDistance, maxDistance//2)*2] for pos, _ in walkers] # move even amount of distances
         else:
             # re-randomize walker distances after each iteration
             walkers = [[pos, random.randint(minDistance, maxDistance)] for pos, _ in walkers]
-
+        if time.time() - time_start > time_limit:
+            break
+        
     # PILLS
     # 2 pills in small, 3 in medium, 4 in large; place them in corners/quadrants
     pillCount = 0
@@ -131,14 +138,17 @@ def buildLayout(layout, numberWalkers, size, numberGhosts, type):
     # GHOSTS
     openPositions = np.where(layout == 0)
     # place ghost(s) in a random spot (preferably at some minimum distance away from pacman)
-    minimum = 10
+    minimum = min(height, width) // 2 # too large may not work for smaller layouts
     for _ in range(numberGhosts):
-        dist = minimum+1
+        dist = 0
         ghostPos = None
-        while dist > minimum:
+        time_start, time_limit = time.time(), 2. # in case while loop does not end
+        while dist < minimum:
             index = random.randint(0, len(openPositions[0])-1)
             ghostPos = (openPositions[0][index], openPositions[1][index])
             dist = manhattanDistance(ghostPos, pacmanPos)
+            if time.time() - time_start > time_limit:
+                break
         layout[ghostPos] = -1
         openPositions = np.where(layout == 0)
     
