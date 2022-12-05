@@ -291,7 +291,7 @@ class ClassicGameRules:
     def __init__(self, timeout=30):
         self.timeout = timeout
 
-    def newGame(self, layout, pacmanAgent, ghostAgents, display, quiet=False, catchExceptions=False):
+    def newGame(self, layout, pacmanAgent, ghostAgents, display, quiet=False, catchExceptions=False, maxMoves = None):
         agents = [pacmanAgent] + ghostAgents[:layout.getNumGhosts()]
         initState = GameState()
         initState.initialize(layout, len(ghostAgents))
@@ -299,6 +299,7 @@ class ClassicGameRules:
         game.state = initState
         self.initialState = initState.deepCopy()
         self.quiet = quiet
+        self.maxMoves = maxMoves
         return game
 
     def process(self, state, game):
@@ -309,6 +310,8 @@ class ClassicGameRules:
             self.win(state, game)
         if state.isLose():
             self.lose(state, game)
+        if self.maxMoves is not None and game.numMoves > self.maxMoves:
+            self.moves_out(state, game)
 
     def win(self, state, game):
         if not self.quiet:
@@ -318,6 +321,11 @@ class ClassicGameRules:
     def lose(self, state, game):
         if not self.quiet:
             print("Pacman died! Score: %d" % state.data.score)
+        game.gameOver = True
+
+    def moves_out(self, state, game):
+        if not self.quiet:
+            print("Pacman died of boredom! Score: %d" % state.data.score)
         game.gameOver = True
 
     def getProgress(self, game):
@@ -562,6 +570,8 @@ def readCommand(argv):
                       help='Turns on exception handling and timeouts during games', default=False)
     parser.add_option('--timeout', dest='timeout', type='int',
                       help=default('Maximum length of time an agent can spend computing in a single game'), default=30)
+    parser.add_option('--maxMoves', dest='maxMoves', type='int',
+                      help=default('Maximum number of moves a game can go on for before losing by default'), default=None)
 
     options, otherjunk = parser.parse_args(argv)
     if len(otherjunk) != 0:
@@ -614,6 +624,7 @@ def readCommand(argv):
     args['record'] = options.record
     args['catchExceptions'] = options.catchExceptions
     args['timeout'] = options.timeout
+    args['maxMoves'] = options.maxMoves
 
     # Special case: recorded games don't use the runGames method or args structure
     if options.gameToReplay != None:
@@ -680,7 +691,7 @@ def replayGame(layout, actions, display):
     display.finish()
 
 
-def runGames(layout, pacman, ghosts, display, numGames, record, numTraining=0, catchExceptions=False, timeout=30):
+def runGames(layout, pacman, ghosts, display, numGames, record, numTraining=0, catchExceptions=False, timeout=30, maxMoves = None):
     import __main__
     __main__.__dict__['_display'] = display
 
@@ -698,7 +709,7 @@ def runGames(layout, pacman, ghosts, display, numGames, record, numTraining=0, c
             gameDisplay = display
             rules.quiet = False
         game = rules.newGame(layout, pacman, ghosts,
-                             gameDisplay, beQuiet, catchExceptions)
+                             gameDisplay, beQuiet, catchExceptions, maxMoves)
         game.run()
         if not beQuiet:
             games.append(game)

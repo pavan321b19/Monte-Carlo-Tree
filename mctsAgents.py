@@ -5,7 +5,7 @@ from util import manhattanDistance, Counter
 from MCTNode import MCTNode, Tactic
 from PacmanTree import PacmanTree
 from pacman import GhostRules, COLLISION_TOLERANCE, SCARED_TIME
-from ghostAgents import RandomGhost
+from ghostAgents import *
 
 from game import Agent, Directions
 
@@ -14,6 +14,8 @@ DEBUG = False
 def debug(*args):
     if DEBUG:
         print(*args)
+
+ghost_types = {'RandomGhost': RandomGhost, 'DirectionalGhost': DirectionalGhost}
 
 class MCTSAgent(Agent):
     """
@@ -42,6 +44,7 @@ class MCTSAgent(Agent):
         self.should_use_simulation_strategy = True # whether to use simulation strategy
         self.use_long_term_goals = True # whether to use long term goals
         self.use_tactics = True # whether to use tactics like ghost hunting or pill hunting
+        self.ghost_type = "RandomGhost"
 
         for key in dir(self):
             val = getattr(self, key)
@@ -52,6 +55,11 @@ class MCTSAgent(Agent):
                     setattr(self, key, type(val)(args[key]))
                 except:
                     print("Couldn't set value for key: " + key + " to value: " + args[key])
+
+        if self.ghost_type in ghost_types:
+            self.simulated_ghost_agent = ghost_types[self.ghost_type](index=1)
+        else:
+            self.simulated_ghost_agent = RandomGhost(index=1)
 
         # Don't change these
 
@@ -65,7 +73,7 @@ class MCTSAgent(Agent):
             # Use default values
             self.num_simulations = 250
 
-        self.simulated_ghost_agent = RandomGhost(1) # Only change if you want to use a different ghost agent
+        
         self.tree = None
         self.prev_state = None # previous state of game
         self.num_pills = 0 # number of pills at start of game
